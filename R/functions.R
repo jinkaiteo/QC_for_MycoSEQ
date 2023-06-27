@@ -3,6 +3,7 @@ library(tidyverse)
 
 extract_df <- function(path) {
   
+  raw_sample_info = read_excel(path = path, sheet = "Sample Setup", skip = 0,range = ("A1:B46"), col_names = c("Field", "Value"))
   raw_sample_setup = read_excel(path = path, sheet = "Sample Setup", skip = 47)
   raw_Ct_results = read_excel(path = path, sheet = "Results", skip = 47)
   raw_Tm_results = read_excel(path = path, sheet = "Melt Curve Result", skip = 47)
@@ -12,6 +13,7 @@ extract_df <- function(path) {
     left_join(raw_Tm_results, by = c("Well", "Well Position", "Target Name", "Sample Name" = "Sample"))
   
   list(
+    raw_sample_info = raw_sample_info,
     raw_results = raw_results,
     raw_Ct = read_excel(path = path, sheet = "Amplification Data", skip = 47),
     raw_Tm = read_excel(path = path, sheet = "Melt Curve Raw Data", skip = 47)

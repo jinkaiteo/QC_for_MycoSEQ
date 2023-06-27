@@ -5,11 +5,21 @@ date: "`r Sys.Date()`"
 output: 
   html_document
 params:
-  source_file: "datafiles/2022-12-21_155355.xls"
-  author: "Jinkai"
+  source_file: 
+    label: "Input source file:"
+    value: datafiles/2022-12-21_155355.xls
+    input: file
+  author: 
+    label: "Author Name:"
+    value: Jinkai
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  message = FALSE, 
+  warning = FALSE)
+
 # 1. Load excel into R
 # 2. Extract the relevant data/information
 # 3. Perform the QC checks
@@ -28,12 +38,31 @@ library(ggplot2)
 
 source("R/functions.R")
 
-# source_file <- choose.files()
+colorize <- function(x, color) {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  } else if (knitr::is_html_output()) {
+    sprintf("<span style='color: %s;'>%s</span>", color,
+      x)
+  } else x
+}
+
+# source_file <- choose.files() #"datafiles/2022-12-21_155355.xls"
+print(params$source_file)
 extracted_df <- extract_df(params$source_file)
 
 setup_after_id <- idenitfy_sample_type(extracted_df$raw_results)
+```
 
+```{r experiment-details}
 
+extracted_df$raw_sample_info %>% column_to_rownames(var = "Field") %>% formattable( col.names = "")
+
+```
+
+------------------------------------------------------------------------
+
+```{r Perform-QC, include=FALSE}
 # ------- Perform the QC checks -----------------
 
 ## A. Positive controls
@@ -67,7 +96,6 @@ setup_for_NEG <- NEG_QC(setup_after_id)
 
 setup_for_IHC <- IHC_QC(setup_after_id) 
 
-
 # d. set-up result conditions
 
 result_lookup_table <- read.csv(file = "config/result_lookup_table.csv", sep = ",", allowEscapes = TRUE)
@@ -98,7 +126,7 @@ assay_QC_msg <- if(QC_results %>% filter(type == "POS" | type == "NEG", color !=
 IHC_failed <- QC_results %>% filter(type == "IHC", color != "blue") 
 
 ihc_QC_msg <- if(length(IHC_failed) > 0) {
-  paste("Warning: these samples (", IHC_failed %>% distinct(name) %>% pull(name) %>% paste0(collapse = ", "), ") had failed IHC.")
+  paste(colorize("Warning:", "red"), " These samples (", IHC_failed %>% distinct(name) %>% pull(name) %>% paste0(collapse = ", "), ") had failed IHC.")
 } else {
   "All samples passed inhibition control."
 }
@@ -108,9 +136,12 @@ ihc_QC_msg <- if(length(IHC_failed) > 0) {
 
 ## Assay Controls:
 
-|               |                  |
-|---------------|------------------|
-| ***Summary*** | `r assay_QC_msg` |
+|                      |                  |
+|----------------------|------------------|
+| ***Controls***       | ***Summary***    |
+| *Negative Control*   | `r assay_QC_msg` |
+| *Positive Control*   | `r pos_QC_msg`   |
+| *Inhibition Control* | `r ihc_QC_msg`   |
 
 ------------------------------------------------------------------------
 
@@ -118,9 +149,9 @@ ihc_QC_msg <- if(length(IHC_failed) > 0) {
 
 `r neg_QC_msg`
 
-```{r NEG, echo=FALSE}
+```{r QC-NEG, echo=FALSE}
 
-QC_results %>% filter(type == "NEG") %>%
+t1 <- QC_results %>% filter(type == "NEG") %>%
   formattable(list(
                 `CT` = formatter("span", style = ~ style(display = "block", 
                   padding = "0 4px", 
@@ -149,7 +180,7 @@ QC_results %>% filter(type == "NEG") %>%
 
 ```
 
-![](www/flowcharts/NEG.png){width="300"}
+<center>![](www/flowcharts/NEG.png){width="300"}</center>
 
 ------------------------------------------------------------------------
 
@@ -157,7 +188,7 @@ QC_results %>% filter(type == "NEG") %>%
 
 `r pos_QC_msg`
 
-```{r POS, echo=FALSE}
+```{r QC-POS, echo=FALSE}
 
 QC_results %>% filter(type == "POS") %>%
   formattable(list(
@@ -187,17 +218,15 @@ QC_results %>% filter(type == "POS") %>%
 
 ```
 
-![](www/flowcharts/NEG.png){width="300"}
+<center>![](www/flowcharts/NEG.png){width="300"}</center>
 
 ------------------------------------------------------------------------
 
 ## IHC Controls
 
-|               |                |
-|---------------|----------------|
-| ***Summary*** | `r ihc_QC_msg` |
+`r ihc_QC_msg`
 
-```{r IHC, echo=FALSE}
+```{r QC-IHC, echo=FALSE}
 
 QC_results %>% filter(type == "IHC") %>%
   formattable(list(
@@ -226,48 +255,61 @@ QC_results %>% filter(type == "IHC") %>%
     ))
 ```
 
-![](www/flowcharts/IHC.png){width="394"}
+<center>![](www/flowcharts/IHC.png){width="394"}</center>
 
 ------------------------------------------------------------------------
 
 ## 4. Results
 
+Samples that failed IHC are indicated in `r colorize("red", "red")`.
+
 ------------------------------------------------------------------------
 
-#### CT
+#### CT for Unknown Samples
 
-```{r echo=FALSE}
+```{r UNK-CT-table, echo=FALSE}
+
+format_unk_status <- function(x) formatter("span", style = ~ style(
+                  `color` = ifelse("name" %in% IHC_failed$name %>% unique(), "black", "red")))
+
 setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>% 
   select (c("Well Position", "name", "type", "Sample Name", "CT", "Ct Mean", "Ct SD")) %>%
-  distinct() %>% mutate(across(where(is.numeric), round, digits = 2)) %>% 
-  formattable()
+  distinct() %>% mutate(across(where(is.numeric), round, digits = 2)) %>%
+  formattable(., lapply(., format_unk_status))
+
 ```
 
-```{r echo=FALSE}
+<center>
+
+```{r UNK-CT-plot, echo=FALSE, fig.align="center"}
 g1 <- extracted_df$raw_Ct %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Cycle) %>% mutate(`Ave Delta Rn` = mean(`Delta Rn`), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), alpha = case_when(name %in% IHC_failed$name ~ 0.75, .default = 1)) %>%
   ggplot(mapping = aes(x = Cycle, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
   geom_point(aes(y = `Delta Rn`)) +
   geom_line(aes(y = `Ave Delta Rn`)) + 
   geom_hline(yintercept = 0.2, linetype = "dashed") +
   ggtitle("Amplification Data") +
-  guides(alpha = FALSE) +
+  guides(alpha = FALSE, scale = "none") +
   theme_minimal()
 
 ggplotly(g1)
 ```
 
+</center>
+
 ------------------------------------------------------------------------
 
-#### Tm
+#### Tm for Unknown Samples
 
-```{r echo=FALSE}
+```{r UNK-TM-table, echo=FALSE}
 setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>% 
   select (c("Well Position", "name", "type", "Sample Name", "Tm", "Melt Peak Height")) %>%
-  distinct() %>% mutate(across(where(is.numeric), round, digits = 2)) %>% 
-  formattable()
+  distinct() %>% mutate(across(where(is.numeric), round, digits = 2))  %>%
+  formattable(., lapply(., format_unk_status))
 ```
 
-```{r echo=FALSE}
+<center>
+
+```{r UNK-TM-melt, echo=FALSE, fig.align="center"}
 df_toPlot_Tm <- extracted_df$raw_Tm %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Temperature) %>% mutate(`Ave Fluorescence` = mean(`Fluorescence`), `Ave Derivative` = mean(Derivative), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), alpha = case_when(name %in% IHC_failed$name ~ 0.75, .default = 1))
 
 g2 <- df_toPlot_Tm %>%
@@ -275,13 +317,17 @@ g2 <- df_toPlot_Tm %>%
   geom_point(aes(y = `Fluorescence`)) +
   geom_line(aes(y = `Ave Fluorescence`)) + 
   ggtitle("Tm (Raw Data)") +
-  guides(alpha = FALSE) +
+  guides(alpha = FALSE, scale = "none") +
   theme_minimal()
 
 ggplotly(g2)
 ```
 
-```{r echo=FALSE}
+</center>
+
+<center>
+
+```{r UNK-CT-peak, echo=FALSE}
 g3 <- df_toPlot_Tm %>%
   ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
   geom_point(aes(y = `Derivative`)) +
@@ -289,10 +335,14 @@ g3 <- df_toPlot_Tm %>%
   geom_hline(yintercept = 30000, linetype = "dashed") +
   geom_vline(xintercept = c(75.5, 83, 86), linetype = "dotted") + 
   ggtitle("Tm (DV)") +
-  guides(alpha = FALSE) +
+  guides(alpha = FALSE, scale = "none") +
   theme_minimal()
 
 ggplotly(g3)
 ```
 
-#### FINAL
+</center>
+
+------------------------------------------------------------------------
+
+<center>End of Report</center>

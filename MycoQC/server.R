@@ -34,21 +34,5 @@ function(input, output, session) {
             
         }
     )
-    
-    observeEvent(input$generateReport, {
-        
-        output$markdown <- renderUI({
-            withMathJax(HTML(readLines(rmarkdown::render(input = here::here("Lesson_05.Rmd"),
-                                                         output_format = rmarkdown::html_fragment(),
-                                                         params = list(
-                                                             source_file = input$fileInput$datapath[1],
-                                                             author = input$author
-                                                         ),
-                                                         quiet = TRUE
-            ))))
-        })
-        
-        
-    })
 
 }
