@@ -1,0 +1,298 @@
+---
+title: "MycoSEQ QC Report"
+author: "`r params$author`"
+date: "`r Sys.Date()`"
+output: 
+  html_document
+params:
+  source_file: "datafiles/2022-12-21_155355.xls"
+  author: "Jinkai"
+---
+
+```{r setup, include=FALSE}
+# 1. Load excel into R
+# 2. Extract the relevant data/information
+# 3. Perform the QC checks
+# 4. Create a report
+# 5. Save/export the report
+
+library(readxl)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(plotly)
+library(formattable)
+library(DT)
+library(ggplot2)
+
+
+source("R/functions.R")
+
+# source_file <- choose.files()
+extracted_df <- extract_df(params$source_file)
+
+setup_after_id <- idenitfy_sample_type(extracted_df$raw_results)
+
+
+# ------- Perform the QC checks -----------------
+
+## A. Positive controls
+
+### 1. Filter for only type == POS
+### 2. POS_01: Check for 23.5000 <= Ct <= 27.5000
+### 3. POS_02: Check for 83.0 < Tm < 86.0
+### 4. POS_03: Check for DV >= 30000
+setup_for_POS <- POS_QC(setup_after_id)
+
+# B. Check NTC conditions
+
+### 1. Filter for only type == NTC
+### 2. NTC_01: Is Ct < 36.2300?
+### 3. NTC_02: Is 75.50 <= Tm <= 83.00?
+### 4. NTC_03: Is Tm < 75.50 or Tm > 86.00?
+### 5. NTC_04: Is DV > 30000?
+setup_for_NEG <- NEG_QC(setup_after_id) 
+
+# C. Check IHC conditions
+
+### 1. Filter for only type == IHC
+### 2. IHC_01: Does it passed POS Control?
+### 3. IHC_02: Is Ct >= 36.2300?
+### 4. IHC_03: Is 75.50 <= Tm <= 83.00?
+### 5. IHC_04: Is 83.00 <= Tm <= 86.00?
+### 2. IHC_05: Is DV >= 30000?
+### 3. IHC_06: Is Tm < 75.50?
+### 4. IHC_07: Is Tm > 86.00?
+### 5. IHC_08: Is 15000 <= DV <= 30000?
+
+setup_for_IHC <- IHC_QC(setup_after_id) 
+
+
+# d. set-up result conditions
+
+result_lookup_table <- read.csv(file = "config/result_lookup_table.csv", sep = ",", allowEscapes = TRUE)
+
+appended_results <- append_results(setup_for_NEG = setup_for_NEG, setup_for_POS = setup_for_POS, setup_for_IHC = setup_for_IHC, result_lookup_table = result_lookup_table)
+
+QC_results <- appended_results$results_after_test_long %>% 
+  select (c("Well Position", "name", "type", "Sample Name", "CT", "Tm", "Melt Peak Height", "Results", "color", "check"))
+ 
+# print QC messages:
+neg_QC_msg <- if(QC_results %>% filter(type == "NEG", color != "blue") %>% nrow() > 0) {
+  "Assay is invalidated due to failed NTC control."
+} else {
+  "No unspecific amplification for NTC."
+}
+pos_QC_msg <- if(QC_results %>% filter(type == "POS", color != "blue") %>% nrow() > 0) {
+  "Assay is invalidated due to failed Positive control."
+} else {
+  "DPC amplification successful."
+}
+
+assay_QC_msg <- if(QC_results %>% filter(type == "POS" | type == "NEG", color != "blue") %>% nrow() > 0) {
+  "Assay is invalidated see below for details."
+} else {
+  "Assay controls are valid."
+}
+
+IHC_failed <- QC_results %>% filter(type == "IHC", color != "blue") 
+
+ihc_QC_msg <- if(length(IHC_failed) > 0) {
+  paste("Warning: these samples (", IHC_failed %>% distinct(name) %>% pull(name) %>% paste0(collapse = ", "), ") had failed IHC.")
+} else {
+  "All samples passed inhibition control."
+}
+```
+
+------------------------------------------------------------------------
+
+## Assay Controls:
+
+|               |                  |
+|---------------|------------------|
+| ***Summary*** | `r assay_QC_msg` |
+
+------------------------------------------------------------------------
+
+### 1. Negative Control (NTC)
+
+`r neg_QC_msg`
+
+```{r NEG, echo=FALSE}
+
+QC_results %>% filter(type == "NEG") %>%
+  formattable(list(
+                `CT` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("Ct", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("Ct", check), "red", "white"))),
+                `Tm` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("Tm", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("Tm", check), "red", "white"))),
+                `Melt Peak Height` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("DV", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("DV", check), "red", "white"))),
+      `Results` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = "white", 
+                  `border-radius` = "4px", 
+                  `background-color` = color)),
+      `color` = FALSE,
+      `check` = FALSE
+    ))
+
+
+```
+
+![](www/flowcharts/NEG.png){width="300"}
+
+------------------------------------------------------------------------
+
+### 2. Positive Control
+
+`r pos_QC_msg`
+
+```{r POS, echo=FALSE}
+
+QC_results %>% filter(type == "POS") %>%
+  formattable(list(
+                `CT` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("Ct", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("Ct", check), "red", "white"))),
+                `Tm` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("Tm", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("Tm", check), "red", "white"))),
+                `Melt Peak Height` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("DV", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("DV", check), "red", "white"))),
+      `Results` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = "white", 
+                  `border-radius` = "4px", 
+                  `background-color` = color)),
+      `color` = FALSE,
+      `check` = FALSE
+    ))
+
+```
+
+![](www/flowcharts/NEG.png){width="300"}
+
+------------------------------------------------------------------------
+
+## IHC Controls
+
+|               |                |
+|---------------|----------------|
+| ***Summary*** | `r ihc_QC_msg` |
+
+```{r IHC, echo=FALSE}
+
+QC_results %>% filter(type == "IHC") %>%
+  formattable(list(
+                `CT` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("Ct", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("Ct", check), "red", "white"))),
+                `Tm` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("Tm", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("Tm", check), "red", "white"))),
+                `Melt Peak Height` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = ifelse(grepl("DV", check), "white", "black"), 
+                  `border-radius` = "4px", 
+                  `background-color` = ifelse(grepl("DV", check), "red", "white"))),
+      `Results` = formatter("span", style = ~ style(display = "block", 
+                  padding = "0 4px", 
+                  `color` = "white", 
+                  `border-radius` = "4px", 
+                  `background-color` = color)),
+      `color` = FALSE,
+      `check` = FALSE
+    ))
+```
+
+![](www/flowcharts/IHC.png){width="394"}
+
+------------------------------------------------------------------------
+
+## 4. Results
+
+------------------------------------------------------------------------
+
+#### CT
+
+```{r echo=FALSE}
+setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>% 
+  select (c("Well Position", "name", "type", "Sample Name", "CT", "Ct Mean", "Ct SD")) %>%
+  distinct() %>% mutate(across(where(is.numeric), round, digits = 2)) %>% 
+  formattable()
+```
+
+```{r echo=FALSE}
+g1 <- extracted_df$raw_Ct %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Cycle) %>% mutate(`Ave Delta Rn` = mean(`Delta Rn`), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), alpha = case_when(name %in% IHC_failed$name ~ 0.75, .default = 1)) %>%
+  ggplot(mapping = aes(x = Cycle, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
+  geom_point(aes(y = `Delta Rn`)) +
+  geom_line(aes(y = `Ave Delta Rn`)) + 
+  geom_hline(yintercept = 0.2, linetype = "dashed") +
+  ggtitle("Amplification Data") +
+  guides(alpha = FALSE) +
+  theme_minimal()
+
+ggplotly(g1)
+```
+
+------------------------------------------------------------------------
+
+#### Tm
+
+```{r echo=FALSE}
+setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>% 
+  select (c("Well Position", "name", "type", "Sample Name", "Tm", "Melt Peak Height")) %>%
+  distinct() %>% mutate(across(where(is.numeric), round, digits = 2)) %>% 
+  formattable()
+```
+
+```{r echo=FALSE}
+df_toPlot_Tm <- extracted_df$raw_Tm %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Temperature) %>% mutate(`Ave Fluorescence` = mean(`Fluorescence`), `Ave Derivative` = mean(Derivative), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), alpha = case_when(name %in% IHC_failed$name ~ 0.75, .default = 1))
+
+g2 <- df_toPlot_Tm %>%
+  ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
+  geom_point(aes(y = `Fluorescence`)) +
+  geom_line(aes(y = `Ave Fluorescence`)) + 
+  ggtitle("Tm (Raw Data)") +
+  guides(alpha = FALSE) +
+  theme_minimal()
+
+ggplotly(g2)
+```
+
+```{r echo=FALSE}
+g3 <- df_toPlot_Tm %>%
+  ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
+  geom_point(aes(y = `Derivative`)) +
+  geom_line(aes(y = `Ave Derivative`)) + 
+  geom_hline(yintercept = 30000, linetype = "dashed") +
+  geom_vline(xintercept = c(75.5, 83, 86), linetype = "dotted") + 
+  ggtitle("Tm (DV)") +
+  guides(alpha = FALSE) +
+  theme_minimal()
+
+ggplotly(g3)
+```
+
+#### FINAL

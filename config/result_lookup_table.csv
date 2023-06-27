@@ -1,0 +1,20 @@
+type,outcome,Results,color,check
+IHC,IHC_outcome_01.1,REVIEW: Failed IHC prevented call,red,Ct
+IHC,IHC_outcome_01.2,REVIEW: Failed IHC prevented call,red,Tm
+IHC,IHC_outcome_01.3,REVIEW: Failed IHC prevented call,red,DV
+IHC,IHC_outcome_02,ABSENT: Negative,blue,
+IHC,IHC_outcome_03,REVIEW: DPC Detected,orange,"Ct, Tm, DV"
+IHC,IHC_outcome_04,ABSENT: Negative,blue,
+IHC,IHC_outcome_05,ABSENT: Negative,blue,
+IHC,IHC_outcome_06,REIVEW: Non-specific Amplification,orange,"Ct, Tm"
+IHC,IHC_outcome_07,ABSENT: Negative,blue,
+IHC,IHC_outcome_08,REVIEW: Review DV,orange,"Ct, Tm, DV"
+IHC,IHC_outcome_09,PRESENT: Positive,red,"Ct, Tm, DV"
+NEG,NEG_outcome_01,Negative Control Pass,blue,
+NEG,NEG_outcome_02,Negative Control Pass,blue,
+NEG,NEG_outcome_03,Negative Control Pass,blue,
+NEG,NEG_outcome_04,Negative Control Fail,red,DV
+POS,POS_outcome_01,Positive Control Pass,blue,
+POS,POS_outcome_02,Positive Control Fail,red,Ct
+POS,POS_outcome_03,Positive Control Fail,red,Tm
+POS,POS_outcome_04,Positive Control Fail,red,DV
