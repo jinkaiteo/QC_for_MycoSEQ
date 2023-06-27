@@ -13,6 +13,16 @@ library(knitr)
 
 # Define server logic required to draw a histogram
 function(input, output, session) {
+    
+    output$checkrender <- renderText({
+        if (identical(rmarkdown::metadata$runtime, "shiny")) {
+            paste("TRUE", rmarkdown::metadata$runtime)
+        } else {
+            paste("FALSE", rmarkdown::metadata$runtime)
+        }
+    })
+    
+    output$checkrenderprint <- renderPrint(rmarkdown::metadata$runtime)
 
     output$report <- downloadHandler(
         filename = function() {
@@ -21,15 +31,20 @@ function(input, output, session) {
         content = function(file) {
             
             here::here()
+            withProgress(
+                message = 'Rendering, please wait!', {
+                    rmarkdown::render(here::here("Lesson_05.Rmd"),
+                                      output_file = file, 
+                                      params = list(
+                                          rendered_by_shiny = TRUE,
+                                          source_file = input$fileInput$datapath[1],
+                                          author = input$author
+                                      ),
+                                      envir = new.env(),
+                                      intermediates_dir = tempdir())
+                }
+            )
             
-            rmarkdown::render(here::here("Lesson_05.Rmd"),
-                              output_file = file, 
-                              params = list(
-                                  source_file = input$fileInput$datapath[1],
-                                  author = input$author
-                              ),
-                              envir = new.env(),
-                              intermediates_dir = tempdir())
           
             
         }

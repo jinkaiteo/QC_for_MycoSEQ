@@ -5,9 +5,10 @@ date: "`r Sys.Date()`"
 output: 
   html_document
 params:
+  rendered_by_shiny: FALSE
   source_file: 
     label: "Input source file:"
-    value: datafiles/2022-12-21_155355.xls
+    value: "datafiles/eg_1.xls"
     input: file
   author: 
     label: "Author Name:"
@@ -38,6 +39,14 @@ library(ggplot2)
 
 source("R/functions.R")
 
+message(rmarkdown::metadata$runtime)
+
+set_Progress <- function (x) {
+  if (params$rendered_by_shiny) {
+    shiny::setProgress(x)  # set progress to x*100%
+  }
+}
+
 colorize <- function(x, color) {
   if (knitr::is_latex_output()) {
     sprintf("\\textcolor{%s}{%s}", color, x)
@@ -47,15 +56,14 @@ colorize <- function(x, color) {
   } else x
 }
 
-# source_file <- choose.files() #"datafiles/2022-12-21_155355.xls"
-print(params$source_file)
+# source_file <- choose.files() #"datafiles/eg_1.xls"
 extracted_df <- extract_df(params$source_file)
 
 setup_after_id <- idenitfy_sample_type(extracted_df$raw_results)
 ```
 
 ```{r experiment-details}
-
+set_Progress(0.1)
 extracted_df$raw_sample_info %>% column_to_rownames(var = "Field") %>% formattable( col.names = "")
 
 ```
@@ -63,6 +71,7 @@ extracted_df$raw_sample_info %>% column_to_rownames(var = "Field") %>% formattab
 ------------------------------------------------------------------------
 
 ```{r Perform-QC, include=FALSE}
+set_Progress(0.2)
 # ------- Perform the QC checks -----------------
 
 ## A. Positive controls
@@ -138,8 +147,8 @@ ihc_QC_msg <- if(length(IHC_failed) > 0) {
 
 |                      |                  |
 |----------------------|------------------|
-| ***Controls***       | ***Summary***    |
-| *Negative Control*   | `r assay_QC_msg` |
+| ***Summary***        | **`r assay_QC_msg`** |
+| *Negative Control*   | `r neg_QC_msg` |
 | *Positive Control*   | `r pos_QC_msg`   |
 | *Inhibition Control* | `r ihc_QC_msg`   |
 
@@ -150,8 +159,8 @@ ihc_QC_msg <- if(length(IHC_failed) > 0) {
 `r neg_QC_msg`
 
 ```{r QC-NEG, echo=FALSE}
-
-t1 <- QC_results %>% filter(type == "NEG") %>%
+set_Progress(0.3)
+QC_results %>% filter(type == "NEG") %>%
   formattable(list(
                 `CT` = formatter("span", style = ~ style(display = "block", 
                   padding = "0 4px", 
@@ -189,7 +198,7 @@ t1 <- QC_results %>% filter(type == "NEG") %>%
 `r pos_QC_msg`
 
 ```{r QC-POS, echo=FALSE}
-
+set_Progress(0.4)
 QC_results %>% filter(type == "POS") %>%
   formattable(list(
                 `CT` = formatter("span", style = ~ style(display = "block", 
@@ -227,7 +236,7 @@ QC_results %>% filter(type == "POS") %>%
 `r ihc_QC_msg`
 
 ```{r QC-IHC, echo=FALSE}
-
+set_Progress(0.5)
 QC_results %>% filter(type == "IHC") %>%
   formattable(list(
                 `CT` = formatter("span", style = ~ style(display = "block", 
@@ -268,7 +277,7 @@ Samples that failed IHC are indicated in `r colorize("red", "red")`.
 #### CT for Unknown Samples
 
 ```{r UNK-CT-table, echo=FALSE}
-
+set_Progress(0.6)
 format_unk_status <- function(x) formatter("span", style = ~ style(
                   `color` = ifelse("name" %in% IHC_failed$name %>% unique(), "black", "red")))
 
@@ -282,16 +291,19 @@ setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>%
 <center>
 
 ```{r UNK-CT-plot, echo=FALSE, fig.align="center"}
-g1 <- extracted_df$raw_Ct %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Cycle) %>% mutate(`Ave Delta Rn` = mean(`Delta Rn`), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), alpha = case_when(name %in% IHC_failed$name ~ 0.75, .default = 1)) %>%
-  ggplot(mapping = aes(x = Cycle, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
-  geom_point(aes(y = `Delta Rn`)) +
-  geom_line(aes(y = `Ave Delta Rn`)) + 
+set_Progress(0.6)
+g1 <- extracted_df$raw_Ct %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Cycle) %>% mutate(`Ave Delta Rn` = mean(`Delta Rn`), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), linetype = case_when(name %in% IHC_failed$name ~ as.integer(4), .default = as.integer(1))) %>%
+  ggplot(mapping = aes(x = Cycle, group = interaction(status, `name`, Well), fill = `name`, color = `name`, linetype = status)) +
+  #geom_point(aes(y = `Delta Rn`)) +
+  geom_line(aes(y = `Delta Rn`)) + 
+  scale_linetype_manual(values=c("dotted", "solid")) +
   geom_hline(yintercept = 0.2, linetype = "dashed") +
   ggtitle("Amplification Data") +
-  guides(alpha = FALSE, scale = "none") +
+  guides(color = guide_legend(title=""), linetype = guide_legend(title="Pass/Fail QC"), scale = "none") +
+  labs(col = "", linetype = "Pass/Fail QC") + 
   theme_minimal()
 
-ggplotly(g1)
+ggplotly(g1, tooltip = c("Delta Rn", "Cycle", "color", "linetype"))
 ```
 
 </center>
@@ -301,6 +313,7 @@ ggplotly(g1)
 #### Tm for Unknown Samples
 
 ```{r UNK-TM-table, echo=FALSE}
+set_Progress(0.7)
 setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>% 
   select (c("Well Position", "name", "type", "Sample Name", "Tm", "Melt Peak Height")) %>%
   distinct() %>% mutate(across(where(is.numeric), round, digits = 2))  %>%
@@ -310,17 +323,21 @@ setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>%
 <center>
 
 ```{r UNK-TM-melt, echo=FALSE, fig.align="center"}
+set_Progress(0.8)
 df_toPlot_Tm <- extracted_df$raw_Tm %>% left_join(setup_after_id %>% select("Well Position",	"name",	"type") %>% distinct(), by = join_by(`Well Position`)) %>% filter(!is.na(name), type != "IHC") %>% group_by(name, Temperature) %>% mutate(`Ave Fluorescence` = mean(`Fluorescence`), `Ave Derivative` = mean(Derivative), status = case_when(name %in% IHC_failed$name ~ "FAIL", .default = "PASS"), alpha = case_when(name %in% IHC_failed$name ~ 0.75, .default = 1))
 
 g2 <- df_toPlot_Tm %>%
-  ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
-  geom_point(aes(y = `Fluorescence`)) +
-  geom_line(aes(y = `Ave Fluorescence`)) + 
+  ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`, Well), color = `name`, linetype = status)) +
+  #geom_point(aes(y = `Fluorescence`)) +
+  geom_line(aes(y = `Fluorescence`)) + 
+  scale_linetype_manual(values=c("dotted", "solid")) + 
+  geom_vline(xintercept = c(75.5, 83, 86), linetype = "dotted") + 
   ggtitle("Tm (Raw Data)") +
-  guides(alpha = FALSE, scale = "none") +
+  guides(color = guide_legend(title=""), linetype = guide_legend(title="Pass/Fail QC"), scale = "none") +
+  labs(col = "", linetype = "Pass/Fail QC") + 
   theme_minimal()
 
-ggplotly(g2)
+ggplotly(g2, tooltip = c("Fluorescence", "Temperature", "color", "linetype"))
 ```
 
 </center>
@@ -328,17 +345,21 @@ ggplotly(g2)
 <center>
 
 ```{r UNK-CT-peak, echo=FALSE}
+set_Progress(0.9)
 g3 <- df_toPlot_Tm %>%
-  ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`), color = `name`, alpha = alpha)) +
-  geom_point(aes(y = `Derivative`)) +
-  geom_line(aes(y = `Ave Derivative`)) + 
-  geom_hline(yintercept = 30000, linetype = "dashed") +
+  ggplot(mapping = aes(x = Temperature, group = interaction(status, `name`, `Well`), color = `name`, linetype = status)) +
+  #geom_point(aes(y = `Derivative`)) +
+  geom_line(aes(y = `Derivative`)) + 
+  scale_linetype_manual(values=c("dotted", "solid")) + 
+  geom_hline(yintercept = c(30000), linetype = "dashed") +
   geom_vline(xintercept = c(75.5, 83, 86), linetype = "dotted") + 
   ggtitle("Tm (DV)") +
-  guides(alpha = FALSE, scale = "none") +
+  guides(color = guide_legend(title=""), linetype = guide_legend(title="Pass/Fail QC"), scale = "none") +
+  labs(col = "", linetype = "Pass/Fail QC") + 
   theme_minimal()
 
-ggplotly(g3)
+ggplotly(g3, tooltip = c("Derivative", "Temperature", "color", "linetype"))
+set_Progress(0.99)
 ```
 
 </center>
