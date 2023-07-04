@@ -116,29 +116,33 @@ QC_results <- appended_results$results_after_test_long %>%
  
 # print QC messages:
 neg_QC_msg <- if(QC_results %>% filter(type == "NEG", color != "blue") %>% nrow() > 0) {
-  "Assay is invalidated due to failed NTC control."
+  colorize("Assay is invalidated due to failed NTC control.", "red")
 } else {
-  "No unspecific amplification for NTC."
+  colorize("No unspecific amplification for NTC.", "blue")
 }
 pos_QC_msg <- if(QC_results %>% filter(type == "POS", color != "blue") %>% nrow() > 0) {
-  "Assay is invalidated due to failed Positive control."
+  colorize("Assay is invalidated due to failed Positive control.", "red")
 } else {
-  "DPC amplification successful."
+  colorize("DPC amplification successful.", "blue")
 }
 
 assay_QC_msg <- if(QC_results %>% filter(type == "POS" | type == "NEG", color != "blue") %>% nrow() > 0) {
-  "Assay is invalidated see below for details."
+   colorize("Assay is invalidated see below for details.", "red")
 } else {
-  "Assay controls are valid."
+  colorize("Assay controls are valid.", "blue")
 }
 
 IHC_failed <- QC_results %>% filter(type == "IHC", color != "blue") 
 
 ihc_QC_msg <- if(length(IHC_failed) > 0) {
-  paste(colorize("Warning:", "red"), " These samples (", IHC_failed %>% distinct(name) %>% pull(name) %>% paste0(collapse = ", "), ") had failed IHC.")
+  colorize("Warning: These samples (", IHC_failed %>% distinct(name) %>% pull(name) %>% paste0(collapse = ", "), ") had failed IHC.", "red")
 } else {
-  "All samples passed inhibition control."
+  colorize("All samples passed inhibition control.", "blue")
 }
+
+# QC_results_formatter <- function(x) formatter("span", style = ~ ifelse(grepl("Ct", check), "color:black, background-color:red", "color:red, background-color:white"))
+
+
 ```
 
 ------------------------------------------------------------------------
@@ -240,9 +244,9 @@ set_Progress(0.5)
 QC_results %>% filter(type == "IHC") %>%
   formattable(list(
                 `CT` = formatter("span", style = ~ style(display = "block", 
-                  padding = "0 4px", 
-                  `color` = ifelse(grepl("Ct", check), "white", "black"), 
-                  `border-radius` = "4px", 
+                  padding = "0 4px",
+                  `color` = ifelse(grepl("Ct", check), "white", "black"),
+                  `border-radius` = "4px",
                   `background-color` = ifelse(grepl("Ct", check), "red", "white"))),
                 `Tm` = formatter("span", style = ~ style(display = "block", 
                   padding = "0 4px", 
@@ -278,8 +282,7 @@ Samples that failed IHC are indicated in `r colorize("red", "red")`.
 
 ```{r UNK-CT-table, echo=FALSE}
 set_Progress(0.6)
-format_unk_status <- function(x) formatter("span", style = ~ style(
-                  `color` = ifelse("name" %in% IHC_failed$name %>% unique(), "black", "red")))
+format_unk_status <- function(x) formatter("span", style = ~ ifelse("name" %in% IHC_failed$name %>% unique(), "color:black", "color:red"))
 
 setup_after_id %>% filter (type == "UNK", name %in% IHC_failed$name) %>% 
   select (c("Well Position", "name", "type", "Sample Name", "CT", "Ct Mean", "Ct SD")) %>%

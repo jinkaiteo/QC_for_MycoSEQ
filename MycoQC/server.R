@@ -11,6 +11,7 @@ library(shiny)
 library(here)
 library(knitr)
 
+
 # Define server logic required to draw a histogram
 function(input, output, session) {
     
@@ -33,7 +34,7 @@ function(input, output, session) {
             here::here()
             withProgress(
                 message = 'Rendering, please wait!', {
-                    rmarkdown::render(here::here("Lesson_05.Rmd"),
+                    rmarkdown::render(here::here("idv_report.Rmd"),
                                       output_file = file, 
                                       params = list(
                                           rendered_by_shiny = TRUE,
@@ -49,5 +50,28 @@ function(input, output, session) {
             
         }
     )
+    
+    observeEvent(input$generateHTML, {
+        output$operations <- renderUI({
+            
+            here::here()
+            withProgress(
+                message = 'Rendering, please wait!', {
+                    rmarkdown::render(here::here("idv_report.Rmd"),
+                                      output_file = here::here(tempdir(), "temp.html"), 
+                                      params = list(
+                                          rendered_by_shiny = TRUE,
+                                          source_file = input$fileInput$datapath[1],
+                                          author = input$author
+                                      ),
+                                      envir = new.env(),
+                                      intermediates_dir = tempdir())
+                }
+            )
+            
+            includeHTML(here::here(tempdir(), "temp.html"))
+        })
+    })
+    
 
 }
